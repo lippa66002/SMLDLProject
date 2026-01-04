@@ -1,0 +1,16 @@
+[project]
+name = "smldlproject"
+version = "0.1.0"
+description = "Prediction model for transit occupancy."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "gtfs-realtime-bindings>=2.0.0",
+    "holidays>=0.83",
+    "hopsworks[great-expectations,python]>=4.1.2",
+    "pandas>=2.0",
+    "protobuf>=4.25.4",
+    "py7zr>=1.0.0",
+    "requests>=2.32.5",
+    "scikit-learn>=1.6.1",
+]

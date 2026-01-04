@@ -45,15 +45,21 @@ Generated datasets are written to the out/ directory.
 
 ## Requirements
 
-- Python 3.9 or higher
+- Python 3.11
 - KoDa API key from Trafiklab
 - Internet access (KoDa API and Open-Meteo API)
 
 ### Python Dependencies
+This project uses `uv` for fast dependecy management. Run the following command to create a virtual environment and sync dependencies from `pyproject.toml`:
 
-pip install pandas numpy scikit-learn requests py7zr protobuf holidays
+```
+uv sync
+```
 
----
+Alternatively, using standard pip with `requirements.txt`:
+```
+pip install -r requirements.txt
+```
 
 ## Environment Setup
 
