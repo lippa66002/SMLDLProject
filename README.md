@@ -33,10 +33,10 @@ Feature engineering stage. Enriches occupancy data with weather data (Open-Meteo
 train.py  
 Trains a class-weighted Random Forest classifier, evaluates performance using temporal splits, and outputs F1 scores and confusion matrices.
 
-prototypes/one_day_aggr.py  
+one_day_aggr.py  
 Lightweight prototype script for testing the pipeline on a single day of data.
 
-utils/CountProperties.py  
+CountProperties.py  
 Simple EDA utility to count rows by month, weekday, or other calendar dimensions.
 
 Generated datasets are written to the out/ directory.
