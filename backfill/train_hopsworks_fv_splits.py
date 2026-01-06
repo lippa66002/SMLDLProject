@@ -33,7 +33,7 @@ TEST_SIZE = 0.2
 RANDOM_STATE = 42
 
 MODEL_NAME = "occupancy_rf"
-MODEL_DIR = "model_artifact"
+MODEL_DIR = "../model_artifact"
 # ---------------------------------------
 api = os.environ.get("HOPSWORKS_API_KEY")
 if api is None:
@@ -213,5 +213,5 @@ def main():
     print(f"[OK] Model saved: {MODEL_NAME}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" :
     main()
