@@ -33,10 +33,10 @@ Feature engineering stage. Enriches occupancy data with weather data (Open-Meteo
 train.py  
 Trains a class-weighted Random Forest classifier, evaluates performance using temporal splits, and outputs F1 scores and confusion matrices.
 
-prototypes/one_day_aggr.py  
+one_day_aggr.py  
 Lightweight prototype script for testing the pipeline on a single day of data.
 
-utils/CountProperties.py  
+CountProperties.py  
 Simple EDA utility to count rows by month, weekday, or other calendar dimensions.
 
 Generated datasets are written to the out/ directory.
@@ -45,15 +45,21 @@ Generated datasets are written to the out/ directory.
 
 ## Requirements
 
-- Python 3.9 or higher
+- Python 3.11
 - KoDa API key from Trafiklab
 - Internet access (KoDa API and Open-Meteo API)
 
 ### Python Dependencies
+This project uses `uv` for fast dependecy management. Run the following command to create a virtual environment and sync dependencies from `pyproject.toml`:
 
-pip install pandas numpy scikit-learn requests py7zr protobuf holidays
+```
+uv sync
+```
 
----
+Alternatively, using standard pip with `requirements.txt`:
+```
+pip install -r requirements.txt
+```
 
 ## Environment Setup
 

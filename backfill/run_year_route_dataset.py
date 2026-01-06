@@ -16,14 +16,13 @@ FEED = "VehiclePositions"
 ROUTE_ID = "9011012065200000"
 
 # Pick your year range
-START = date(2024, 10, 1)
-END   = date(2025, 8, 31)
+START = date(2025, 10, 1)
+END   = date(2025, 12, 31)
 
 SNAPSHOTS_PER_HOUR = 10  # set 4 if you're desperate for speed
 
-# Put cache OUTSIDE OneDrive for speed
-CACHE_DIR = Path(r"C:\koda_cache")
-RAW_DIR = CACHE_DIR / "raw"
+CACHE_DIR = Path(__file__).parent / "koda_cache"
+RAW_DIR = CACHE_DIR
 
 OUT_DIR = Path("out")
 OUT_CSV = OUT_DIR / f"{OPERATOR}_{START}_{END}_route_{ROUTE_ID}_hourly.csv"
@@ -71,7 +70,7 @@ def month_tag(d: date) -> str:
 
 
 def cached_koda_download(proc: KoDaProcessor, url: str, cache_path: Path,
-                         max_wait_sec: int = 20*60, poll_interval_sec: int = 30) -> bytes:
+                         max_wait_sec: int = 10*60, poll_interval_sec: int = 30) -> bytes:
     """
     Cache only real archives (zip/7z). If KoDa says 'being prepared', poll until ready.
     If cache contains JSON (bad cache from earlier runs), delete and refetch.
@@ -109,7 +108,7 @@ def cached_koda_download(proc: KoDaProcessor, url: str, cache_path: Path,
                 payload = {}
 
             msg = (payload.get("message") or "").lower()
-            if "being prepared" in msg:
+            if "being prepared" in msg:# or "being processed" in msg:
                 elapsed = time.time() - start
                 if elapsed > max_wait_sec:
                     raise TimeoutError(f"KoDa file not ready after {int(elapsed)}s: {url}")
