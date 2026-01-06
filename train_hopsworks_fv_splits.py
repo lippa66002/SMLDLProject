@@ -39,6 +39,7 @@ api = os.environ.get("HOPSWORKS_API_KEY")
 if api is None:
     raise RuntimeError("HOPSWORKS_API_KEY is not set")
 
+
 def login():
     # Same pattern as the notebook
     return hopsworks.login(
@@ -49,27 +50,25 @@ def login():
 
 
 def create_feature_view(fs):
-    fg_occ = fs.get_feature_group("skane_traffic")
-    fg_cal = fs.get_feature_group("sweden_calendar")
-    fg_wx  = fs.get_feature_group("skane_weather")
+    fg_occ = fs.get_feature_group("skane_traffic", version=1)
+    fg_cal = fs.get_feature_group("sweden_calendar", version=1)
+    fg_wx  = fs.get_feature_group("skane_weather", version=1)
 
     query = (
-        fg_occ.select_all()
-        .join(fg_cal.select_all(), on=["date"])
-        .join(fg_wx.select_all(), on=["date", "hour"])
+        fg_occ.select(['date', 'hour', 'route_id', 'label_grouped', 'event_time'])
+        .join(fg_cal.select(["month", "day", "weekday", "is_weekend", "is_holiday_se", "is_workday_se"]), on=["date"])
+        .join(fg_wx.select(["temperature_2m", "precipitation", "windspeed_10m", "cloudcover"]), on=["date", "hour"])
     )
 
-    fv = fs.create_feature_view(
+    fv = fs.get_or_create_feature_view(
         name="occupancy_fv",
         query=query,
         labels=["label_grouped"],
         description="Occupancy FV: traffic + calendar + weather",
+        version=1
     )
 
     return fv
-
-
-
 
 
 def build_pipeline(X):
@@ -141,14 +140,12 @@ def main():
 
     fv = create_feature_view(fs)
 
-    X, y = fv.training_data(
-        description="Occupancy training dataset",
-        test_size=0.2
+
+    X_train, X_test, y_train, y_test = fv.train_test_split(
+        description='Temporal split: Test data starts 2025-08-15',
+        test_start="2025-08-15"
     )
-    X_train = X.iloc[:int(0.8 * len(X))]
-    X_test = X.iloc[int(0.8 * len(X)):]
-    y_train = y.iloc[:int(0.8 * len(y))]
-    y_test = y.iloc[int(0.8 * len(y)):]
+
     print("COLUMNS IN FEATURE VIEW:")
     for c in X_train.columns:
         print(c)
@@ -165,24 +162,24 @@ def main():
         ("Hour only", ["hour"]),
         ("Calendar", [
             "hour",
-            "sweden_calendar_month",
-            "sweden_calendar_weekday",
-            "sweden_calendar_is_weekend",
-            "sweden_calendar_is_holiday_se",
-            "sweden_calendar_is_workday_se",
+            "month",
+            "weekday",
+            "is_weekend",
+            "is_holiday_se",
+            "is_workday_se",
         ]),
 
         ("Calendar + Weather", [
             "hour",
-            "sweden_calendar_month",
-            "sweden_calendar_weekday",
-            "sweden_calendar_is_weekend",
-            "sweden_calendar_is_holiday_se",
-            "sweden_calendar_is_workday_se",
-            "skane_weather_temperature_2m",
-            "skane_weather_precipitation",
-            "skane_weather_windspeed_10m",
-            "skane_weather_cloudcover",
+            "month",
+            "weekday",
+            "is_weekend",
+            "is_holiday_se",
+            "is_workday_se",
+            "temperature_2m",
+            "precipitation",
+            "windspeed_10m",
+            "cloudcover",
         ]),
     ]
 
@@ -206,10 +203,11 @@ def main():
             "macro_f1": best["macro_f1"],
             "weighted_f1": best["weighted_f1"],
         },
+        feature_view=fv,
+        input_example=X_train.sample(1),
         description=f"Best run: {best['name']} | Features: {best['features']}",
     )
     model.save(MODEL_DIR)
-
     print(f"[OK] Model saved: {MODEL_NAME}")
 
 
