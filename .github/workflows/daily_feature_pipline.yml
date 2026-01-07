@@ -25,6 +25,6 @@ jobs:
 
       - name: Run pipeline
         env: 
-          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORK_API_KEY }}
           KODA_API_KEY: ${{ secrets.KODA_API_KEY }}
         run: python feature_pipeline.py
