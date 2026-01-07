@@ -20,8 +20,8 @@ if root_dir not in sys.path:
 from koda_processor import KoDaProcessor, KoDaConfig
 
 # --- Configuration ---
-HOPSWORKS_API_KEY = os.environ.get("HOPSWORK_API_KEY")
-KODA_API_KEY = os.environ.get("KODA_API")
+HOPSWORKS_API_KEY = os.environ.get("HOPSWORKS_API_KEY")
+KODA_API_KEY = os.environ.get("KODA_API_KEY")
 
 OPERATOR = "skane"
 FEED = "VehiclePositions"
