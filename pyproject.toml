@@ -8,6 +8,7 @@ dependencies = [
     "gtfs-realtime-bindings>=2.0.0",
     "holidays>=0.83",
     "hopsworks[python,great-expectations]>=4.1.2",
+    "lightgbm>=4.0.0",
     "pandas>=2.0",
     "protobuf>=4.25.4",
     "py7zr>=1.0.0",
@@ -17,4 +18,12 @@ dependencies = [
     "requests>=2.32.5",
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Ignore deprecation warnings from great_expectations (internal pyparsing usage)
+    "ignore:.*setResultsName.*:DeprecationWarning",
+    # Ignore marshmallow warnings from great_expectations
+    "ignore:.*Number.*field should not be instantiated.*:marshmallow.warnings.ChangedInMarshmallow4Warning",
 ]
