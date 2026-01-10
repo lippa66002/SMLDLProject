@@ -8,7 +8,7 @@ and aggregates occupancy data by (date, hour, route_id, direction_id).
 
 Output: Parquet file(s) with columns:
     date, hour, route_id, direction_id, n_obs, n_empty, n_many_seats,
-    n_few_seats, n_standing, n_crushed, n_full, max_occupancy, avg_occupancy
+    n_few_seats, n_standing, n_crushed, n_full, avg_occupancy, max_occupancy, mode_occupancy
 
 Usage:
     # Process date range:
@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import csv
 import time
 import json
 import tempfile
@@ -232,9 +231,6 @@ def process_day(
             if not scores:
                 continue
 
-            avg_score = sum(scores) / len(scores)
-            max_score = max(scores)
-
             output_rows.append({
                 "date": ds,
                 "hour": hour,
@@ -247,8 +243,9 @@ def process_day(
                 "n_standing": counts["STANDING_ROOM_ONLY"],
                 "n_crushed": counts["CRUSHED_STANDING_ROOM_ONLY"],
                 "n_full": counts["FULL"],
-                "max_occupancy": max_score,
-                "avg_occupancy": round(avg_score, 4),
+                "avg_occupancy": round(sum(scores) / len(scores), 4),
+                "max_occupancy": max(scores),
+                "mode_occupancy": max(set(scores), key=scores.count),
             })
 
         return output_rows
@@ -272,8 +269,9 @@ def save_parquet(rows: List[Dict], out_path: Path):
         "n_standing": [r["n_standing"] for r in rows],
         "n_crushed": [r["n_crushed"] for r in rows],
         "n_full": [r["n_full"] for r in rows],
-        "max_occupancy": [r["max_occupancy"] for r in rows],
         "avg_occupancy": [r["avg_occupancy"] for r in rows],
+        "max_occupancy": [r["max_occupancy"] for r in rows],
+        "mode_occupancy": [r["mode_occupancy"] for r in rows],
     })
     
     pq.write_table(table, out_path, compression="snappy")

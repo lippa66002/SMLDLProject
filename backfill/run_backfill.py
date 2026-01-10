@@ -85,9 +85,15 @@ def main() -> None:
     traffic_df = load_traffic_parquets(parquet_files)
     
     print(f"Loaded {len(traffic_df)} traffic rows.")
+    
+    # Validate observation counts
+    if not validate_observation_counts(traffic_df):
+        raise ValueError("Traffic data validation failed: individual occupancy counts do not sum to n_obs")
+    print("Traffic observation counts validated successfully.")
+
     traffic_df = prepare_traffic_types(traffic_df)
     traffic_df = add_traffic_event_time(traffic_df)
-
+    
     # =========================================================================
     # Step 2: Calculate Date Range
     # =========================================================================
@@ -150,18 +156,21 @@ def main() -> None:
             kwargs={"column": "date"}
         )
     )
+
     traffic_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
             kwargs={"column": "hour", "min_value": 0, "max_value": 23}
         )
     )
+
     traffic_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
             kwargs={"column": "route_id"}
         )
     )
+
     traffic_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_in_set",
@@ -186,15 +195,24 @@ def main() -> None:
     traffic_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
-            kwargs={"column": "max_occupancy", "min_value": 0, "max_value": 5}
-        )
-    )
-    traffic_suite.add_expectation(
-        ge.core.ExpectationConfiguration(
-            expectation_type="expect_column_values_to_be_between",
             kwargs={"column": "avg_occupancy", "min_value": 0, "max_value": 5}
         )
     )
+
+    traffic_suite.add_expectation(
+        ge.core.ExpectationConfiguration(
+            expectation_type="expect_column_values_to_be_between",
+            kwargs={"column": "max_occupancy", "min_value": 0, "max_value": 5}
+        )
+    )
+
+    traffic_suite.add_expectation(
+        ge.core.ExpectationConfiguration(
+            expectation_type="expect_column_values_to_be_between",
+            kwargs={"column": "mode_occupancy", "min_value": 0, "max_value": 5}
+        )
+    )
+
     traffic_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_not_be_null",
@@ -213,6 +231,7 @@ def main() -> None:
         online_enabled=False,
         expectation_suite=traffic_suite,
     )
+
     traffic_fg.insert(traffic_df, write_options={"wait_for_job": True}, validation_options={"run_validation": True})
     
     # --- Weather Feature Group ---
@@ -225,6 +244,7 @@ def main() -> None:
             kwargs={"column": "date"}
         )
     )
+    
     weather_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
