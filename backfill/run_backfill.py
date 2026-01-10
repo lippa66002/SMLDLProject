@@ -234,6 +234,23 @@ def main() -> None:
 
     traffic_fg.insert(traffic_df, write_options={"wait_for_job": True}, validation_options={"run_validation": True})
     
+    # Add feature descriptions for traffic
+    traffic_fg.update_feature_description("date", "Date of the traffic measurement (YYYY-MM-DD)")
+    traffic_fg.update_feature_description("hour", "Hour of the day (0-23)")
+    traffic_fg.update_feature_description("route_id", "Unique identifier for the bus route/line")
+    traffic_fg.update_feature_description("direction_id", "Direction of travel (0 or 1)")
+    traffic_fg.update_feature_description("n_obs", "Total number of bus observations recorded in this hour/route")
+    traffic_fg.update_feature_description("n_empty", "Count of observations with EMPTY occupancy status")
+    traffic_fg.update_feature_description("n_many_seats", "Count of observations with MANY_SEATS_AVAILABLE status")
+    traffic_fg.update_feature_description("n_few_seats", "Count of observations with FEW_SEATS_AVAILABLE status")
+    traffic_fg.update_feature_description("n_standing", "Count of observations with STANDING_ROOM_ONLY status")
+    traffic_fg.update_feature_description("n_crushed", "Count of observations with CRUSHED_STANDING_ROOM_ONLY status")
+    traffic_fg.update_feature_description("n_full", "Count of observations with FULL status")
+    traffic_fg.update_feature_description("avg_occupancy", "Average occupancy score (0-5 scale) for this hour/route")
+    traffic_fg.update_feature_description("max_occupancy", "Maximum occupancy score (0-5) observed in this hour/route")
+    traffic_fg.update_feature_description("mode_occupancy", "Most frequent occupancy score (0-5) in this hour/route")
+    traffic_fg.update_feature_description("event_time", "Timestamp for point-in-time correct joins")
+    
     # --- Weather Feature Group ---
     print(f"\nCreating Expectation Suite for {WEATHER_FG_NAME}...")
     weather_suite = ge.core.ExpectationSuite(expectation_suite_name="weather_suite_v2")
@@ -316,6 +333,19 @@ def main() -> None:
     )
     weather_fg.insert(weather_df, write_options={"wait_for_job": True}, validation_options={"run_validation": True})
     
+    # Add feature descriptions for weather
+    weather_fg.update_feature_description("date", "Date of the weather measurement (YYYY-MM-DD)")
+    weather_fg.update_feature_description("hour", "Hour of the day (0-23)")
+    weather_fg.update_feature_description("temperature_2m", "Temperature at 2 meters above ground (Celsius)")
+    weather_fg.update_feature_description("precipitation", "Precipitation amount (mm)")
+    weather_fg.update_feature_description("windspeed_10m", "Wind speed at 10 meters above ground (km/h)")
+    weather_fg.update_feature_description("cloudcover", "Cloud cover percentage (0-100%)")
+    weather_fg.update_feature_description("prev_temperature_2m", "Previous day's temperature at same hour (Celsius)")
+    weather_fg.update_feature_description("prev_precipitation", "Previous day's precipitation at same hour (mm)")
+    weather_fg.update_feature_description("prev_windspeed_10m", "Previous day's wind speed at same hour (km/h)")
+    weather_fg.update_feature_description("prev_cloudcover", "Previous day's cloud cover at same hour (0-100%)")
+    weather_fg.update_feature_description("event_time", "Timestamp for point-in-time correct joins")
+    
     # --- Calendar Feature Group ---
     print(f"\nCreating Expectation Suite for {CALENDAR_FG_NAME}...")
     calendar_suite = ge.core.ExpectationSuite(expectation_suite_name="calendar_suite_v2")
@@ -328,23 +358,11 @@ def main() -> None:
     )
     calendar_suite.add_expectation(
         ge.core.ExpectationConfiguration(
-            expectation_type="expect_column_values_to_not_be_null",
-            kwargs={"column": "year"}
-        )
-    )
-    calendar_suite.add_expectation(
-        ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_between",
             kwargs={"column": "month", "min_value": 1, "max_value": 12}
         )
     )
-    calendar_suite.add_expectation(
-        ge.core.ExpectationConfiguration(
-            expectation_type="expect_column_values_to_be_between",
-            kwargs={"column": "day", "min_value": 1, "max_value": 31}
-        )
-    )
-    # Weekday should be 0-6 (Mon-Sun)
+    # Weekday should be Mon-Sun
     calendar_suite.add_expectation(
         ge.core.ExpectationConfiguration(
             expectation_type="expect_column_values_to_be_in_set",
@@ -379,6 +397,15 @@ def main() -> None:
         expectation_suite=calendar_suite,
     )
     calendar_fg.insert(calendar_df, write_options={"wait_for_job": True}, validation_options={"run_validation": True})
+    
+    # Add feature descriptions for calendar
+    calendar_fg.update_feature_description("date", "Date in YYYY-MM-DD format")
+    calendar_fg.update_feature_description("month", "Month of the year (1-12)")
+    calendar_fg.update_feature_description("weekday", "Day of the week (Monday-Sunday)")
+    calendar_fg.update_feature_description("is_weekend", "True if Saturday or Sunday")
+    calendar_fg.update_feature_description("is_holiday_se", "True if Swedish public holiday")
+    calendar_fg.update_feature_description("is_workday_se", "True if not weekend and not Swedish holiday")
+    calendar_fg.update_feature_description("event_time", "Timestamp for point-in-time correct joins")
     
     print("\nSUCCESS: All feature groups uploaded and validated!")
 

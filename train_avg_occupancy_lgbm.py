@@ -41,8 +41,10 @@ FV_VERSION = 1
 TRAIN_TEST_SPLIT_VERSION = 1
 
 # Model configuration
-MODEL_NAME = f"occupancy_lgbm_{TARGET_COLUMN}"
+MODEL_NAME = f"occupancy_lgbm_clipped_{TARGET_COLUMN}"
 MODEL_DIR = Path(__file__).parent / "model_artifact"
+PREDICTION_MIN = 0.0  # Minimum allowed prediction value
+PREDICTION_MAX = 5.0  # Maximum allowed prediction value
 
 # Data split configuration
 TRAIN_START_DATE = "2023-10-01"
@@ -62,7 +64,8 @@ RANDOM_STATE = 42
 # ============================================================================
 
 # Features to select from each feature group
-TRAFFIC_FEATURES = ["date", "hour", "route_id", "direction_id"]
+# Note: event_time is included in the query for temporal splits but dropped before training
+TRAFFIC_FEATURES = ["hour", "route_id", "direction_id"]
 WEATHER_FEATURES = [
     "temperature_2m",
     "precipitation",
@@ -75,7 +78,6 @@ WEATHER_FEATURES = [
 ]
 CALENDAR_FEATURES = [
     "month",
-    "day",
     "weekday",
     "is_weekend",
     "is_holiday_se",
@@ -87,7 +89,6 @@ CATEGORICAL_FEATURES = ["route_id", "direction_id", "weekday"]
 NUMERIC_FEATURES = [
     "hour",
     "month",
-    "day",
     "temperature_2m",
     "precipitation",
     "windspeed_10m",
@@ -213,6 +214,19 @@ def get_hyperparameter_grid() -> dict:
     }
 
 
+class ClippedLGBMRegressor(lgb.LGBMRegressor):
+    """
+    LGBMRegressor wrapper that clips predictions to a valid range.
+    
+    Ensures all predictions fall within [PREDICTION_MIN, PREDICTION_MAX].
+    """
+    
+    def predict(self, X, **kwargs):
+        """Predict with clipping to valid range."""
+        raw_predictions = super().predict(X, **kwargs)
+        return np.clip(raw_predictions, PREDICTION_MIN, PREDICTION_MAX)
+
+
 def tune_hyperparameters(
     X_train: pd.DataFrame, y_train: pd.Series
 ) -> dict:
@@ -271,7 +285,7 @@ def tune_hyperparameters(
                     ("preprocessor", build_preprocessor()),
                     (
                         "model",
-                        lgb.LGBMRegressor(
+                        ClippedLGBMRegressor(
                             random_state=RANDOM_STATE,
                             n_jobs=-1,
                             verbose=-1,
@@ -323,7 +337,7 @@ def train_final_model(
             ("preprocessor", build_preprocessor()),
             (
                 "model",
-                lgb.LGBMRegressor(
+                ClippedLGBMRegressor(
                     random_state=RANDOM_STATE,
                     n_jobs=-1,
                     verbose=-1,

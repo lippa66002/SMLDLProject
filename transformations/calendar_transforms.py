@@ -27,9 +27,7 @@ def generate_calendar_data(df: pd.DataFrame, date_col: str = "date") -> pd.DataF
     # Ensure datetime objects
     dt_series = pd.to_datetime(df[date_col])
     
-    df["year"] = dt_series.dt.year
     df["month"] = dt_series.dt.month
-    df["day"] = dt_series.dt.day
     df["weekday"] = dt_series.dt.day_name()
     df["is_weekend"] = dt_series.dt.dayofweek >= 5
     
@@ -49,7 +47,7 @@ def prepare_calendar_types(df: pd.DataFrame) -> pd.DataFrame:
     """
     Optimize column types for calendar data.
 
-    Converts year, month, day columns to int16 for efficient storage.
+    Converts month column to int16 for efficient storage.
 
     Args:
         df: DataFrame with calendar data.
@@ -60,7 +58,7 @@ def prepare_calendar_types(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # Int columns
-    int_cols = ["year", "month", "day"]
+    int_cols = ["month"]
     df = optimize_int_columns(df, int_cols, "int16")
 
     return df

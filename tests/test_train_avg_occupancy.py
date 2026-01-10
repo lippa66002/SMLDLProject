@@ -31,7 +31,6 @@ class TestPreprocessor(unittest.TestCase):
             # Numeric features
             "hour": [8, 12, 18, 23],
             "month": [1, 6, 12, 3],
-            "day": [1, 15, 25, 10],
             "temperature_2m": [5.0, 20.0, 10.0, 15.0],
             "precipitation": [0.0, 2.5, 0.0, 1.0],
             "windspeed_10m": [10.0, 5.0, 15.0, 8.0],
@@ -122,9 +121,9 @@ class TestHyperparameterGrid(unittest.TestCase):
             self.assertGreater(lr, 0)
             self.assertLessEqual(lr, 1)
         
-        # max_depth should be positive
+        # max_depth should be positive or -1 (unlimited)
         for md in grid["model__max_depth"]:
-            self.assertGreater(md, 0)
+            self.assertTrue(md > 0 or md == -1)
 
 
 class TestFeatureConfiguration(unittest.TestCase):
