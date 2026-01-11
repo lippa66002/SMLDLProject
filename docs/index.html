@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Interactive dashboard showing public transport occupancy predictions for Skånetrafiken routes">
+    <title>Skånetrafiken Occupancy Forecast</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🚌 Occupancy Forecast</h1>
+            <p class="subtitle">Skånetrafiken Route Predictions</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="route-select">Route</label>
+                <select id="route-select">
+                    <option value="">Loading routes...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="direction-select">Direction</label>
+                <select id="direction-select">
+                    <option value="0">Direction 0</option>
+                    <option value="1">Direction 1</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="date-tabs" id="date-tabs">
+            <!-- Tabs will be generated dynamically -->
+        </div>
+
+        <div class="content">
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Loading data...</p>
+            </div>
+
+            <div id="no-data" class="no-data" style="display: none;">
+                <p>No data available for this selection.</p>
+            </div>
+
+            <div id="prediction-table" class="prediction-table" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Hour</th>
+                            <th>Predicted Avg</th>
+                            <th>Predicted Max</th>
+                            <th class="actual-col">Actual Avg</th>
+                            <th class="actual-col">Actual Max</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Rows will be generated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="legend">
+            <h3>Occupancy Levels</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <span class="legend-color occ-0"></span>
+                    <span>0: Empty</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color occ-1"></span>
+                    <span>1: Many seats available</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color occ-2"></span>
+                    <span>2: Few seats available</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color occ-3"></span>
+                    <span>3: Standing room only</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color occ-4"></span>
+                    <span>4: Crushed standing room only</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color occ-5"></span>
+                    <span>5: Full</span>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p id="generated-at">Last updated: Loading...</p>
+            <p>Data from <a href="https://www.skanetrafiken.se/" target="_blank">Skånetrafiken</a> via Hopsworks ML
+                Platform</p>
+        </footer>
+    </div>
+
+    <script>
+        // Global state
+        let dashboardData = null;
+        let selectedRoute = null;
+        let selectedDirection = 0;
+        let selectedDate = null;
+
+        // DOM elements
+        const routeSelect = document.getElementById('route-select');
+        const directionSelect = document.getElementById('direction-select');
+        const dateTabs = document.getElementById('date-tabs');
+        const loading = document.getElementById('loading');
+        const noData = document.getElementById('no-data');
+        const predictionTable = document.getElementById('prediction-table');
+        const tableBody = document.getElementById('table-body');
+        const generatedAt = document.getElementById('generated-at');
+
+        // Load dashboard data
+        async function loadData() {
+            try {
+                const response = await fetch('dashboard_data.json');
+                if (!response.ok) throw new Error('Failed to load data');
+                dashboardData = await response.json();
+
+                // Update generated time
+                if (dashboardData.generated_at) {
+                    const genDate = new Date(dashboardData.generated_at);
+                    generatedAt.textContent = `Last updated: ${genDate.toLocaleString()}`;
+                }
+
+                populateRoutes();
+                loading.style.display = 'none';
+            } catch (error) {
+                console.error('Error loading data:', error);
+                loading.innerHTML = '<p class="error">Failed to load data. Please try refreshing the page.</p>';
+            }
+        }
+
+        // Populate route dropdown
+        function populateRoutes() {
+            if (!dashboardData || !dashboardData.routes) return;
+
+            routeSelect.innerHTML = '<option value="">Select a route...</option>';
+
+            // Sort routes by short_name (numerically if possible)
+            const sortedRoutes = Object.entries(dashboardData.routes)
+                .sort((a, b) => {
+                    const numA = parseInt(a[1].short_name) || 0;
+                    const numB = parseInt(b[1].short_name) || 0;
+                    if (numA !== numB) return numA - numB;
+                    return a[1].short_name.localeCompare(b[1].short_name);
+                });
+
+            for (const [routeId, routeData] of sortedRoutes) {
+                const option = document.createElement('option');
+                option.value = routeId;
+                option.textContent = `${routeData.short_name} - ${routeData.long_name}`;
+                routeSelect.appendChild(option);
+            }
+
+            // Select first route
+            if (sortedRoutes.length > 0) {
+                routeSelect.value = sortedRoutes[0][0];
+                onRouteChange();
+            }
+        }
+
+        // Get all dates for selected route and direction
+        function getDates() {
+            if (!selectedRoute || !dashboardData) return [];
+
+            const routeData = dashboardData.routes[selectedRoute];
+            if (!routeData) return [];
+
+            const dirData = routeData.directions[selectedDirection];
+            if (!dirData || !dirData.days) return [];
+
+            return Object.keys(dirData.days).sort();
+        }
+
+        // Populate date tabs
+        function populateDateTabs() {
+            const dates = getDates();
+            dateTabs.innerHTML = '';
+
+            if (dates.length === 0) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                return;
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+
+            dates.forEach((dateStr, index) => {
+                const tab = document.createElement('button');
+                tab.className = 'date-tab';
+                tab.dataset.date = dateStr;
+
+                const dateObj = new Date(dateStr);
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                const dayNum = dateObj.getDate();
+                const month = dateObj.toLocaleDateString('en-US', { month: 'short' });
+
+                if (dateStr === today) {
+                    tab.innerHTML = `<span class="today-badge">Today</span><br>${dayName} ${dayNum}`;
+                } else if (dateStr < today) {
+                    tab.innerHTML = `<span class="past-badge">Past</span><br>${dayName} ${dayNum}`;
+                } else {
+                    tab.innerHTML = `${dayName}<br>${month} ${dayNum}`;
+                }
+
+                tab.onclick = () => selectDate(dateStr);
+                dateTabs.appendChild(tab);
+            });
+
+            // Select today if available, otherwise first date
+            selectedDate = dates.includes(today) ? today : dates[0];
+            selectDate(selectedDate);
+        }
+
+        // Select a date
+        function selectDate(dateStr) {
+            selectedDate = dateStr;
+
+            // Update tab styles
+            document.querySelectorAll('.date-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.date === dateStr);
+            });
+
+            renderTable();
+        }
+
+        // Get color class for occupancy value
+        function getOccupancyClass(value) {
+            if (value === null || value === undefined) return '';
+            const level = Math.round(value);
+            return `occ-${Math.min(5, Math.max(0, level))}`;
+        }
+
+        // Format occupancy value for display
+        function formatValue(value, isMax = false) {
+            if (value === null || value === undefined) return '-';
+            if (isMax) return Math.round(value).toString();
+            return value.toFixed(1);
+        }
+
+        // Render the prediction table
+        function renderTable() {
+            if (!dashboardData || !selectedRoute || !selectedDate) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                return;
+            }
+
+            const routeData = dashboardData.routes[selectedRoute];
+            if (!routeData) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                return;
+            }
+
+            const dirData = routeData.directions[selectedDirection];
+            if (!dirData || !dirData.days || !dirData.days[selectedDate]) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                return;
+            }
+
+            const dayData = dirData.days[selectedDate];
+            const isPast = dayData.type === 'past';
+
+            // Show/hide actual columns
+            document.querySelectorAll('.actual-col').forEach(el => {
+                el.style.display = isPast ? '' : 'none';
+            });
+
+            // Build table rows
+            tableBody.innerHTML = '';
+
+            const hours = Object.keys(dayData.hours).map(Number).sort((a, b) => a - b);
+
+            if (hours.length === 0) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                return;
+            }
+
+            for (const hour of hours) {
+                const hourData = dayData.hours[hour.toString()];
+                const row = document.createElement('tr');
+
+                // Hour column
+                const hourCell = document.createElement('td');
+                hourCell.textContent = `${hour.toString().padStart(2, '0')}:00`;
+                row.appendChild(hourCell);
+
+                // Predicted Avg
+                const predAvgCell = document.createElement('td');
+                predAvgCell.textContent = formatValue(hourData.pred_avg);
+                predAvgCell.className = getOccupancyClass(hourData.pred_avg);
+                row.appendChild(predAvgCell);
+
+                // Predicted Max
+                const predMaxCell = document.createElement('td');
+                predMaxCell.textContent = formatValue(hourData.pred_max, true);
+                predMaxCell.className = getOccupancyClass(hourData.pred_max);
+                row.appendChild(predMaxCell);
+
+                if (isPast) {
+                    // Actual Avg
+                    const actAvgCell = document.createElement('td');
+                    actAvgCell.className = 'actual-col';
+                    actAvgCell.textContent = formatValue(hourData.actual_avg);
+                    if (hourData.actual_avg !== null) {
+                        actAvgCell.classList.add(getOccupancyClass(hourData.actual_avg));
+                    }
+                    row.appendChild(actAvgCell);
+
+                    // Actual Max
+                    const actMaxCell = document.createElement('td');
+                    actMaxCell.className = 'actual-col';
+                    actMaxCell.textContent = formatValue(hourData.actual_max, true);
+                    if (hourData.actual_max !== null) {
+                        actMaxCell.classList.add(getOccupancyClass(hourData.actual_max));
+                    }
+                    row.appendChild(actMaxCell);
+                }
+
+                tableBody.appendChild(row);
+            }
+
+            noData.style.display = 'none';
+            predictionTable.style.display = 'block';
+        }
+
+        // Event handlers
+        function onRouteChange() {
+            selectedRoute = routeSelect.value;
+            if (!selectedRoute) {
+                noData.style.display = 'block';
+                predictionTable.style.display = 'none';
+                dateTabs.innerHTML = '';
+                return;
+            }
+
+            // Check available directions
+            const routeData = dashboardData.routes[selectedRoute];
+            if (routeData && routeData.directions) {
+                const dirs = Object.keys(routeData.directions);
+                directionSelect.innerHTML = '';
+                for (const dir of dirs) {
+                    const option = document.createElement('option');
+                    option.value = dir;
+                    option.textContent = `Direction ${dir}`;
+                    directionSelect.appendChild(option);
+                }
+                selectedDirection = dirs[0] || '0';
+                directionSelect.value = selectedDirection;
+            }
+
+            populateDateTabs();
+        }
+
+        function onDirectionChange() {
+            selectedDirection = directionSelect.value;
+            populateDateTabs();
+        }
+
+        // Initialize
+        routeSelect.addEventListener('change', onRouteChange);
+        directionSelect.addEventListener('change', onDirectionChange);
+
+        // Load data on page load
+        loadData();
+    </script>
+</body>
+
+</html>

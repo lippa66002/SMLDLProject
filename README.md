@@ -1,187 +1,151 @@
-# SMLDLProject
-# Public Transport Occupancy Prediction Pipeline
+# Skåne Public Transport Occupancy Prediction
 
-This repository contains an end-to-end machine learning pipeline for predicting public transport crowding levels (e.g. EMPTY vs CROWDED) for specific bus routes in Skåne, Sweden.
+A machine learning pipeline for predicting occupancy levels on Skånetrafiken buses. This end-to-end system ingests GTFS-Realtime data, enriches it with weather and calendar context, trains LightGBM models, and serves predictions through an interactive dashboard.
 
-The system ingests GTFS-Realtime data from the KoDa API, synchronizes it with GTFS-Static schedules, enriches the data with weather and holiday context, and trains a Random Forest classifier to predict hourly occupancy levels.
+## Live Dashboard
 
-The pipeline is designed to be reproducible, robust to missing data, and suitable for multi-year longitudinal analysis.
-
----
+**[View the Dashboard](https://lippa66002.github.io/SMLDLProject/)** - Updated daily with predictions for all Skåne bus routes.
 
 ## Project Structure
 
-kodaProcessor.py  
-Core engine. Handles API authentication, resilient downloading, archive extraction, and trip_id → route_id mapping.
-
-
-select_route.py  
-Used to find the best route for our model. Using the data from a random day and the trip to route mapping we compute entropy to find the route with more diverse data as possible
-
-verify_route.py
-We used this file to verify the diversity of the route on one month data
-
-run_year_route_dataset.py  
-Downloads one year of GTFS-Realtime data for a given route, maps trips to routes, samples snapshots, and aggregates occupancy into hourly bins.
-
-mergedatasets.py  
-Combines multiple yearly CSV files into a single  dataset. 
-
-build_final_dataset.py  
-Feature engineering stage. Enriches occupancy data with weather data (Open-Meteo), Swedish holidays, and calendar-based features.
-
-train.py  
-Trains a class-weighted Random Forest classifier, evaluates performance using temporal splits, and outputs F1 scores and confusion matrices.
-
-one_day_aggr.py  
-Lightweight prototype script for testing the pipeline on a single day of data.
-
-CountProperties.py  
-Simple EDA utility to count rows by month, weekday, or other calendar dimensions.
-
-Generated datasets are written to the out/ directory.
-
----
-
-## Requirements
-
-- Python 3.11
-- KoDa API key from Trafiklab
-- Internet access (KoDa API and Open-Meteo API)
-
-### Python Dependencies
-This project uses `uv` for fast dependecy management. Run the following command to create a virtual environment and sync dependencies from `pyproject.toml`:
-
 ```
+SMLDLProject/
+├── src/                        # All Python source code
+│   ├── pipelines/              # Main executable scripts
+│   │   ├── feature_pipeline.py         # Daily feature ingestion
+│   │   ├── batch_inference_pipeline.py # Dashboard data generation
+│   │   ├── train_avg_occupancy.py      # Train avg occupancy model
+│   │   ├── train_max_occupancy.py      # Train max occupancy model
+│   │   ├── download_traffic_data.py    # Historical data download
+│   │   └── upload_features.py          # Backfill Hopsworks
+│   │
+│   ├── utils/                  # Shared utility modules
+│   │   ├── koda_processor.py   # KoDa GTFS-RT API client
+│   │   ├── gtfs_schedule.py    # GTFS schedule parsing
+│   │   └── transformations/    # Data transformation functions
+│   │
+│   └── hopsworks_jobs/         # Server-side Spark scripts
+│       ├── get_existing_dates.py
+│       └── export_past_traffic.py
+│
+├── tests/                      # Unit tests
+├── docs/                       # Dashboard (static HTML/JS)
+│   ├── index.html
+│   ├── style.css
+│   └── dashboard_data.json     # Generated predictions
+├── .github/workflows/          # CI/CD automation
+└── pyproject.toml              # Project configuration
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/)
+- Hopsworks account with API key
+- KoDa API key (for historical GTFS-RT data)
+- GTFS Regional API key (for schedule data)
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/lippa66002/SMLDLProject.git
+cd SMLDLProject
+
+# Install dependencies with uv
 uv sync
-```
 
-Alternatively, using standard pip with `requirements.txt`:
-```
+# Or with pip
 pip install -r requirements.txt
+
+
+# Edit .env with your API keys:
+#   HOPSWORKS_API_KEY=your_key
+#   KODA_API_KEY=your_key
+#   GTFS_REGIONAL_API_KEY=your_key
 ```
 
-## Environment Setup
+## Pipelines
 
-The KoDa API key must be provided as an environment variable.
+### Daily Feature Pipeline
 
-Windows (PowerShell):
+Fetches and processes traffic data from KoDa, weather from Open-Meteo, and calendar features.
 
-$env:KODA_API_KEY="your_key_here"
+```bash
+uv run feature-pipeline
+```
 
-macOS / Linux:
+Runs automatically via GitHub Actions daily at 6:00 AM UTC.
 
-export KODA_API_KEY="your_key_here"
+### Batch Inference Pipeline
 
----
+Generates predictions for the dashboard (3 past days + today + 3 future days).
 
-## Data Pipeline
+```bash
+uv run inference-pipeline
+```
 
-### Phase 1: Data Extraction and Mapping
-Script: run_year_route_dataset.py
+Runs automatically via GitHub Actions daily at 8:00 AM UTC, after feature pipeline.
 
-This stage downloads and aggregates GTFS-Realtime data for a single route and date range.
+### Training Pipelines
 
-Inputs:
-- Date range (e.g. 2024-10-01 to 2025-08-31)
-- Route ID
+Train or retrain the LightGBM models:
 
-Processing steps:
-- Downloads GTFS-Static files for each relevant month
-- Parses trips.txt to build a trip_id → route_id lookup table
-- Downloads daily GTFS-Realtime protobuf archives
-- Samples 10 evenly spaced snapshots per hour
-- Aggregates occupancy status into a single hourly label using the mode
+```bash
+# Average occupancy (regression)
+uv run train-avg
 
-Output:
-out/skane_<start>_<end>_route_<route_id>_hourly.csv
+# Max occupancy (classification)
+uv run train-max
+```
 
----
+### Historical Data Backfill
 
-### Phase 2: Dataset Merging
-Script: mergedatasets.py
+Download historical traffic data from KoDa:
 
-Because KoDa data is large, extraction is typically performed in yearly chunks.
+```bash
+# Download specific date range
+uv run download-traffic --start 2025-10-01 --end 2025-10-31
 
-Processing steps:
-- Merges multiple yearly CSV files
-- Deduplicates overlapping rows
-- Prioritizes rows with a higher number of observations
+# Upload to Hopsworks
+uv run upload-features
+```
 
-Output:
-out/merged_<N>years_route_<route_id>_hourly.csv
+## Data Sources
 
----
+| Source | API | Description |
+|--------|-----|-------------|
+| **KoDa** | GTFS-Realtime | VehiclePositions with occupancy status from Skånetrafiken |
+| **Open-Meteo** | Archive + Forecast | Hourly weather (temperature, precipitation, wind, clouds) |
+| **holidays** | Python package | Swedish public holidays |
 
-### Phase 3: Feature Engineering
-Script: build_final_dataset.py
+## Feature Groups (Hopsworks)
 
-Prepares the dataset for machine learning.
+| Name | Version | Primary Key | Description |
+|------|---------|-------------|-------------|
+| `skane_traffic` | 2 | `route_id, direction_id, date, hour` | Aggregated hourly occupancy counts |
+| `skane_weather` | 2 | `date, hour` | Weather + previous day values |
+| `sweden_calendar` | 2 | `date` | Holidays, weekday, workday flags |
 
-Features added:
-- Weather data from Open-Meteo:
-  - Temperature
-  - Rain
-  - Wind speed
-- Calendar context:
-  - is_holiday_se
-  - is_weekend
-  - time_of_day (e.g. morning, rush hour, evening)
-- Target encoding:
-  - Sparse occupancy labels are collapsed into broader classes
-  - Example: STANDING_ROOM_ONLY and FULL are mapped to CROWDED
+## Models
 
----
+| Model | Type | Target | Registry Name |
+|-------|------|--------|---------------|
+| Avg Occupancy | LightGBM Regressor | `avg_occupancy` (0-5 float) | `occupancy_lgbm_clipped_avg_occupancy` |
+| Max Occupancy | LightGBM Classifier | `max_occupancy` (0-5 class) | `occupancy_lgbm_classifier_max_occupancy` |
 
-### Phase 4: Model Training
-Script: train.py
+## Testing
 
-Model:
-- Random Forest Classifier
-- Class-weighted to handle label imbalance
+```bash
+# Run all tests
+python -m pytest tests/ -v
 
-Evaluation:
-- Temporal train/validation/test split to avoid data leakage
-- Macro F1-score and confusion matrix are reported
-
----
-
-## Route Discovery
-
-Script: select_route.py
-
-This script analyzes a sample of data to identify routes with:
-- Sufficient temporal coverage
-- High label entropy
-
-It helps avoid training models on routes with sparse or uninformative occupancy data.
-
----
-
-## Sampling Strategy
-
-GTFS-Realtime data is highly frequent and noisy.
-
-Instead of processing every snapshot, the pipeline:
-- Samples 10 evenly spaced observations per hour
-- Aggregates them into a single hourly label using the most frequent occupancy state
-
-This reduces noise while keeping the dataset statistically meaningful.
-
----
-
-## Results
-the best results were obtained by using all the time related data, but without the weather data.
-
-## Limitations
-- Occupancy labels are inferred from vehicle reports, not direct passenger counts
-- Weather data is regional (Skåne-level), not stop-specific
-- Models are route-specific and require retraining for new routes
-- Data availability depends on KoDa coverage and operator reporting quality
-
----
+# Run specific test file
+python -m pytest tests/test_transformations.py -v
+```
 
 ## License
 
-This project is provided for research and educational purposes.
-Use of KoDa and Open-Meteo data is subject to their respective terms of service.
+This project was developed as part of the ID2223 course at KTH Royal Institute of Technology.

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "smldlproject"
 version = "0.1.0"
@@ -8,10 +12,36 @@ dependencies = [
     "gtfs-realtime-bindings>=2.0.0",
     "holidays>=0.83",
     "hopsworks[python,great-expectations]>=4.1.2",
+    "lightgbm>=4.0.0",
     "pandas>=2.0",
     "protobuf>=4.25.4",
     "py7zr>=1.0.0",
+    "pyarrow>=15.0.0",
+    "pytest>=8.4.2",
+    "python-dotenv>=1.2.1",
     "requests>=2.32.5",
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
+]
+
+[project.scripts]
+train-avg = "src.pipelines.train_avg_occupancy:main"
+train-max = "src.pipelines.train_max_occupancy:main"
+feature-pipeline = "src.pipelines.feature_pipeline:main"
+inference-pipeline = "src.pipelines.batch_inference_pipeline:main"
+download-traffic = "src.pipelines.download_traffic_data:main"
+upload-features = "src.pipelines.upload_features:main"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Ignore deprecation warnings from great_expectations (internal pyparsing usage)
+    "ignore:.*setResultsName.*:DeprecationWarning",
+    # Ignore marshmallow warnings from great_expectations
+    "ignore:.*Number.*field should not be instantiated.*:marshmallow.warnings.ChangedInMarshmallow4Warning",
 ]
