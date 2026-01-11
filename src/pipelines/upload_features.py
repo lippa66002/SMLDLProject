@@ -27,28 +27,28 @@ import pandas as pd
 dotenv.load_dotenv()
 
 # Add project root to path
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from transformations.traffic_transforms import (
+from src.utils.transformations.traffic_transforms import (
     load_traffic_parquets,
     prepare_traffic_types,
     add_event_time as add_traffic_event_time,
     validate_observation_counts
 )
-from transformations.weather_transforms import (
+from src.utils.transformations.weather_transforms import (
     fetch_weather_data,
     add_previous_day_weather,
     prepare_weather_types,
     add_event_time as add_weather_event_time
 )
-from transformations.calendar_transforms import (
+from src.utils.transformations.calendar_transforms import (
     generate_calendar_data,
     prepare_calendar_types,
     add_event_time as add_calendar_event_time
 )
 
 # Configuration
-OUT_DIR = Path(__file__).parent.parent / "out"
+OUT_DIR = Path(__file__).parent.parent.parent / "out"
 HOPSWORKS_PROJECT = "occupancy"
 TRAFFIC_FG_NAME = "skane_traffic"
 WEATHER_FG_NAME = "skane_weather"

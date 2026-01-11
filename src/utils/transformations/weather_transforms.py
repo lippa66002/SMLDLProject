@@ -11,7 +11,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from transformations.type_utils import (
+from .type_utils import (
     optimize_int_columns,
     optimize_float_columns,
 )

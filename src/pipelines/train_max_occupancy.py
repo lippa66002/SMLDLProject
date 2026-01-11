@@ -22,6 +22,7 @@ Features used:
     - Calendar: month, weekday, is_weekend, is_holiday_se, is_workday_se
 """
 import os
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -43,6 +44,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 from tqdm import tqdm
 
+from src.utils.transformations.type_utils import bool_to_int
+
 load_dotenv()
 
 # ============================================================================
@@ -59,7 +62,6 @@ TRAIN_TEST_SPLIT_VERSION = 1
 
 # Model configuration
 MODEL_NAME = f"occupancy_lgbm_classifier_{TARGET_COLUMN}"
-MODEL_DIR = Path(__file__).parent / "model_artifact_max"
 
 # Class labels (ordinal)
 CLASS_NAMES = [
@@ -80,8 +82,8 @@ TEST_END_DATE = "2026-01-08"
 CREATE_NEW_SPLIT = False  # Set to False to use existing split
 
 # Hyperparameter tuning configuration
-TUNE_SAMPLE_FRACTION = 0.50  # Use 50% of data for tuning
-TUNE_N_ITER = 50  # Number of random search iterations
+TUNE_SAMPLE_FRACTION = 0.30  # Use 30% of data for tuning
+TUNE_N_ITER = 30  # Number of random search iterations
 RANDOM_STATE = 42
 
 
@@ -168,11 +170,6 @@ def create_feature_view(fs):
     return fv
 
 
-def _bool_to_int(x):
-    """Convert boolean columns to int for preprocessing (picklable)."""
-    return x.astype(int)
-
-
 def build_preprocessor() -> ColumnTransformer:
     """Build the preprocessing pipeline for features."""
     numeric_transformer = SimpleImputer(strategy="median")
@@ -189,7 +186,7 @@ def build_preprocessor() -> ColumnTransformer:
 
     boolean_transformer = Pipeline(
         steps=[
-            ("to_int", FunctionTransformer(_bool_to_int, validate=False)),
+            ("to_int", FunctionTransformer(bool_to_int, validate=False)),
             ("imputer", SimpleImputer(strategy="most_frequent")),
         ]
     )
@@ -499,24 +496,24 @@ def save_and_upload_model(
     mr,
     X_train: pd.DataFrame,
 ) -> None:
-    """Save model locally and upload to Hopsworks Model Registry."""
-    print("\n--- Saving Model ---")
+    """Upload model to Hopsworks Model Registry."""
+    print("\n--- Uploading Model to Hopsworks ---")
 
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODEL_DIR / "model.pkl"
-    joblib.dump(model, model_path)
-    print(f"Saved model to: {model_path}")
+    # Use temp directory for upload (no local persistence)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        model_path = tmp_path / "model.pkl"
+        joblib.dump(model, model_path)
 
-    print("Uploading to Hopsworks Model Registry...")
-    hs_model = mr.sklearn.create_model(
-        name=MODEL_NAME,
-        metrics=metrics,
-        feature_view=fv,
-        input_example=X_train.sample(1, random_state=RANDOM_STATE),
-        description=f"LightGBM classifier for {TARGET_COLUMN} prediction (ordinal, asymmetric)",
-    )
-    hs_model.save(str(MODEL_DIR))
-    print(f"Model uploaded: {MODEL_NAME}")
+        hs_model = mr.sklearn.create_model(
+            name=MODEL_NAME,
+            metrics=metrics,
+            feature_view=fv,
+            input_example=X_train.sample(1, random_state=RANDOM_STATE),
+            description=f"LightGBM classifier for {TARGET_COLUMN} prediction (ordinal, asymmetric)",
+        )
+        hs_model.save(str(tmp_path))
+        print(f"Model uploaded: {MODEL_NAME}")
 
 
 def main():

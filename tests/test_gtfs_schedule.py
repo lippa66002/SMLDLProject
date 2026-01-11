@@ -2,9 +2,14 @@
 Unit tests for GTFS schedule parsing module.
 """
 import pytest
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
-from gtfs_schedule import (
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.utils.gtfs_schedule import (
     normalize_traffic_hour,
     expand_hour_range,
     parse_time_to_hours,

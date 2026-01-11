@@ -5624,7 +5624,7 @@ wheels = [
 [[package]]
 name = "smldlproject"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "gtfs-realtime-bindings" },
     { name = "holidays", version = "0.83", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },

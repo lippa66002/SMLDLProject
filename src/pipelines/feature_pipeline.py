@@ -30,24 +30,24 @@ import pandas as pd
 
 dotenv.load_dotenv()
 
-# Ensure local imports work
-root_dir = str(Path().absolute())
+# Ensure project root is in path for imports
+root_dir = str(Path(__file__).parent.parent.parent)
 if root_dir not in sys.path:
-    sys.path.append(root_dir)
+    sys.path.insert(0, root_dir)
 
-from koda_processor import KoDaProcessor, KoDaConfig
-from transformations.weather_transforms import (
+from src.utils.koda_processor import KoDaProcessor, KoDaConfig
+from src.utils.transformations.weather_transforms import (
     fetch_weather_data,
     add_previous_day_weather,
     prepare_weather_types,
     add_event_time as add_weather_event_time,
 )
-from transformations.calendar_transforms import (
+from src.utils.transformations.calendar_transforms import (
     generate_calendar_data,
     prepare_calendar_types,
     add_event_time as add_calendar_event_time,
 )
-from transformations.traffic_transforms import (
+from src.utils.transformations.traffic_transforms import (
     prepare_traffic_types,
     add_event_time as add_traffic_event_time,
     validate_observation_counts,
@@ -227,8 +227,8 @@ def get_existing_dates_via_job(project, lookback_date: date) -> set:
     jobs_api = project.get_jobs_api()
     dataset_api = project.get_dataset_api()
     
-    # Path to the PySpark script (relative to project root)
-    script_local_path = Path(__file__).parent / "hopsworks_jobs" / "get_existing_dates.py"
+    # Path to the PySpark script
+    script_local_path = Path(__file__).parent.parent / "hopsworks_jobs" / "get_existing_dates.py"
     script_remote_path = "Resources/get_existing_dates.py"
     output_remote_file = "Resources/existing_dates.txt"  # Single file output
     

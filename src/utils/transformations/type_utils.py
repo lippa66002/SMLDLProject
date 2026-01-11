@@ -11,6 +11,16 @@ import pandas as pd
 import numpy as np
 
 
+def bool_to_int(x):
+    """
+    Convert boolean columns to int for preprocessing.
+    
+    This function must be in a stable module location (not __main__) 
+    for sklearn FunctionTransformer pickling to work correctly.
+    """
+    return x.astype(int)
+
+
 def optimize_int_columns(
     df: pd.DataFrame,
     columns: List[str],

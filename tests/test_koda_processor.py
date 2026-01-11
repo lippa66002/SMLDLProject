@@ -11,7 +11,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from koda_processor import KoDaProcessor, KoDaConfig
+from src.utils.koda_processor import KoDaProcessor, KoDaConfig
 
 
 class TestKoDaProcessor(unittest.TestCase):

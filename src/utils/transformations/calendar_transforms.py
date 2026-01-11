@@ -9,7 +9,7 @@ from __future__ import annotations
 import holidays
 import pandas as pd
 
-from transformations.type_utils import optimize_int_columns
+from .type_utils import optimize_int_columns
 
 def generate_calendar_data(df: pd.DataFrame, date_col: str = "date") -> pd.DataFrame:
     """

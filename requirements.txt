@@ -65,6 +65,8 @@ idna==3.11
 importlib-metadata==8.7.1 ; python_full_version < '3.10'
 importlib-resources==6.5.2 ; python_full_version < '3.10'
 inflate64==1.0.4
+iniconfig==2.1.0 ; python_full_version < '3.10'
+iniconfig==2.3.0 ; python_full_version >= '3.10'
 ipykernel==6.31.0 ; python_full_version < '3.10'
 ipykernel==7.1.0 ; python_full_version >= '3.10'
 ipython==8.18.1 ; python_full_version < '3.10'
@@ -98,6 +100,7 @@ jupyterlab-widgets==3.0.16
 kiwisolver==1.4.7 ; python_full_version < '3.10'
 kiwisolver==1.4.9 ; python_full_version >= '3.10'
 lark==1.3.1
+lightgbm==4.6.0
 makefun==1.16.0
 markupsafe==3.0.3
 marshmallow==3.26.2
@@ -127,6 +130,7 @@ pillow==11.3.0 ; python_full_version < '3.10'
 pillow==12.1.0 ; python_full_version >= '3.10'
 platformdirs==4.4.0 ; python_full_version < '3.10'
 platformdirs==4.5.1 ; python_full_version >= '3.10'
+pluggy==1.6.0
 prometheus-client==0.23.1
 prompt-toolkit==3.0.52
 protobuf==4.25.8
@@ -152,7 +156,10 @@ pymysql==1.1.2
 pyparsing==3.3.1
 pyppmd==1.2.0 ; python_full_version < '3.10'
 pyppmd==1.3.1 ; python_full_version >= '3.10'
+pytest==8.4.2 ; python_full_version < '3.10'
+pytest==9.0.2 ; python_full_version >= '3.10'
 python-dateutil==2.9.0.post0
+python-dotenv==1.2.1
 python-json-logger==4.0.0
 pytz==2025.2
 pywin32==311 ; python_full_version < '3.10' and platform_python_implementation != 'PyPy' and sys_platform == 'win32'

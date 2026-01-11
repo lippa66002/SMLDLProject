@@ -37,9 +37,9 @@ from typing import List, Dict, Set, Tuple, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from koda_processor import KoDaProcessor, KoDaConfig, _parse_pb_worker
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src.utils.koda_processor import KoDaProcessor, KoDaConfig, _parse_pb_worker
 
 
 # =============================================================================
@@ -50,8 +50,8 @@ OPERATOR = "skane"
 FEED = "VehiclePositions"
 SNAPSHOTS_PER_HOUR = 30
 
-CACHE_DIR = Path(__file__).parent / "koda_cache"
-OUT_DIR = Path(__file__).parent.parent / "out"
+CACHE_DIR = Path(__file__).parent.parent.parent / "koda_cache"
+OUT_DIR = Path(__file__).parent.parent.parent / "out"
 
 # Memory-conscious worker count (each worker uses ~300-500MB with trip_to_route mapping).
 # With 6GB limit, use max 4 workers to leave room for main process.

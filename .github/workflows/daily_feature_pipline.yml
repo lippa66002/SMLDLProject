@@ -3,7 +3,7 @@ name: Daily Feature Pipeline
 on:
   workflow_dispatch:      # Allows manual trigger from the UI
   schedule:
-    - cron: '0 5 * * *' 
+    - cron: '0 6 * * *' 
 
 jobs:
   run-pipeline:
@@ -27,4 +27,4 @@ jobs:
         env: 
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORK_API_KEY }}
           KODA_API_KEY: ${{ secrets.KODA_API_KEY }}
-        run: python feature_pipeline.py
+        run: python -m src.pipelines.feature_pipeline

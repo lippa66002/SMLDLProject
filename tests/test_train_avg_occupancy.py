@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 
 # Add project root to path
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from train_avg_occupancy_lgbm import (
+from src.pipelines.train_avg_occupancy import (
     build_preprocessor,
     get_hyperparameter_grid,
     CATEGORICAL_FEATURES,

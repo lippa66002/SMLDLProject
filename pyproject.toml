@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "smldlproject"
 version = "0.1.0"
@@ -19,6 +23,20 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
 ]
+
+[project.scripts]
+train-avg = "src.pipelines.train_avg_occupancy:main"
+train-max = "src.pipelines.train_max_occupancy:main"
+feature-pipeline = "src.pipelines.feature_pipeline:main"
+inference-pipeline = "src.pipelines.batch_inference_pipeline:main"
+download-traffic = "src.pipelines.download_traffic_data:main"
+upload-features = "src.pipelines.upload_features:main"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

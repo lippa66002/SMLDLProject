@@ -34,13 +34,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Add project root to path for imports
-root_dir = Path(__file__).parent
-if str(root_dir) not in sys.path:
-    sys.path.insert(0, str(root_dir))
+root_dir = str(Path(__file__).parent.parent.parent)
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
-from gtfs_schedule import get_active_routes_for_dates
-from transformations.calendar_transforms import generate_calendar_data
-from transformations.weather_transforms import (
+from src.utils.gtfs_schedule import get_active_routes_for_dates
+from src.utils.transformations.calendar_transforms import generate_calendar_data
+from src.utils.transformations.weather_transforms import (
     add_previous_day_weather,
     fetch_weather_data,
     fetch_weather_forecast,
@@ -48,7 +48,9 @@ from transformations.weather_transforms import (
 
 # Import classes needed for pickle deserialization of trained models
 # These classes are referenced in the pickled sklearn Pipelines
-from train_avg_occupancy_lgbm import ClippedLGBMRegressor, _bool_to_int
+from src.pipelines.train_avg_occupancy import ClippedLGBMRegressor
+from src.utils.transformations.type_utils import bool_to_int
+
 
 # ============================================================================
 # CONFIGURATION
@@ -67,7 +69,7 @@ PAST_DAYS = 3
 FUTURE_DAYS = 3  # Not counting today
 
 # Output paths
-DOCS_DIR = Path(__file__).parent / "docs"
+DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
 OUTPUT_JSON = DOCS_DIR / "dashboard_data.json"
 
 # Feature definitions (must match training)
@@ -215,7 +217,7 @@ def fetch_past_data_via_job(
     dataset_api = project.get_dataset_api()
     
     # Script paths
-    script_local_path = Path(__file__).parent / "hopsworks_jobs" / "export_past_traffic.py"
+    script_local_path = Path(__file__).parent.parent / "hopsworks_jobs" / "export_past_traffic.py"
     script_remote_path = "Resources/export_past_traffic.py"
     output_remote_path = "Resources/past_traffic_data.parquet"
     
