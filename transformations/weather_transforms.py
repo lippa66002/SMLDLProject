@@ -85,6 +85,65 @@ def fetch_weather_data(
     return df
 
 
+def fetch_weather_forecast(
+    start_date: date,
+    end_date: date,
+    lat: float = WEATHER_LAT,
+    lon: float = WEATHER_LON,
+    timezone: str = WEATHER_TIMEZONE,
+) -> pd.DataFrame:
+    """
+    Fetch hourly weather forecast from OpenMeteo forecast API.
+    
+    Unlike fetch_weather_data which uses the archive API for historical data,
+    this uses the forecast API for future predictions. Returns same columns
+    for consistency.
+    
+    Args:
+        start_date: First date to fetch
+        end_date: Last date to fetch (max ~16 days into future)
+        lat: Latitude coordinate
+        lon: Longitude coordinate
+        timezone: Timezone string
+        
+    Returns:
+        DataFrame with hourly weather data (same format as historical)
+    """
+    if start_date > end_date:
+        return pd.DataFrame()
+    
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
+    
+    # Use forecast API instead of archive API
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_str,
+        "end_date": end_str,
+        "hourly": ["temperature_2m", "precipitation", "windspeed_10m", "cloudcover"],
+        "timezone": timezone,
+    }
+    
+    resp = requests.get(url, params=params, timeout=120)
+    resp.raise_for_status()
+    data = resp.json()
+    
+    hourly = data.get("hourly", {})
+    df = pd.DataFrame(hourly)
+    
+    if df.empty:
+        return df
+    
+    # Parse time column - same processing as historical
+    df["time"] = pd.to_datetime(df["time"])
+    df["date"] = df["time"].dt.normalize()
+    df["hour"] = df["time"].dt.hour
+    
+    return df
+
+
 def add_previous_day_weather(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add previous day weather columns.

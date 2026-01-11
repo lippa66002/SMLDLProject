@@ -1,0 +1,432 @@
+/* ============================================
+   Skånetrafiken Occupancy Dashboard Styles
+   ============================================ */
+
+:root {
+    /* Color palette */
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --text-primary: #f0f6fc;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --border-color: #30363d;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+
+    /* Occupancy level colors (green → yellow → orange → red) */
+    --occ-0: #2da44e;  /* Empty - Green */
+    --occ-1: #57ab5a;  /* Many Seats - Light Green */
+    --occ-2: #c69026;  /* Few Seats - Yellow */
+    --occ-3: #d29922;  /* Standing - Orange-Yellow */
+    --occ-4: #db6d28;  /* Crowded - Orange */
+    --occ-5: #f85149;  /* Full - Red */
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Typography */
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    --font-size-sm: 12px;
+    --font-size-base: 14px;
+    --font-size-lg: 16px;
+    --font-size-xl: 24px;
+    --font-size-2xl: 32px;
+
+    /* Border radius */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+}
+
+/* Reset & Base */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    min-height: 100vh;
+}
+
+/* Container */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+header .subtitle {
+    color: var(--text-secondary);
+    font-size: var(--font-size-lg);
+}
+
+/* Controls */
+.controls {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
+}
+
+.control-group {
+    flex: 1;
+    min-width: 200px;
+}
+
+.control-group label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-group select {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.control-group select:hover {
+    border-color: var(--accent-blue);
+}
+
+.control-group select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+/* Date Tabs */
+.date-tabs {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+    overflow-x: auto;
+    padding-bottom: var(--spacing-sm);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.date-tab {
+    flex-shrink: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    min-width: 80px;
+}
+
+.date-tab:hover {
+    background-color: var(--bg-tertiary);
+    border-color: var(--accent-blue);
+}
+
+.date-tab.active {
+    background-color: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+}
+
+.today-badge, .past-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.today-badge {
+    background-color: var(--accent-green);
+    color: white;
+}
+
+.past-badge {
+    background-color: var(--text-muted);
+    color: var(--text-primary);
+}
+
+/* Content Area */
+.content {
+    min-height: 300px;
+}
+
+/* Loading State */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    color: var(--text-secondary);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* No Data State */
+.no-data {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--text-secondary);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-color);
+}
+
+.error {
+    color: var(--occ-5);
+}
+
+/* Prediction Table */
+.prediction-table {
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.prediction-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.prediction-table th {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-align: left;
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.prediction-table td {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+}
+
+.prediction-table tr:last-child td {
+    border-bottom: none;
+}
+
+.prediction-table tr:hover td {
+    background-color: var(--bg-tertiary);
+}
+
+/* Occupancy Level Colors */
+.occ-0 {
+    background-color: rgba(45, 164, 78, 0.2);
+    color: var(--occ-0);
+    font-weight: 600;
+}
+
+.occ-1 {
+    background-color: rgba(87, 171, 90, 0.2);
+    color: var(--occ-1);
+    font-weight: 600;
+}
+
+.occ-2 {
+    background-color: rgba(198, 144, 38, 0.2);
+    color: var(--occ-2);
+    font-weight: 600;
+}
+
+.occ-3 {
+    background-color: rgba(210, 153, 34, 0.2);
+    color: var(--occ-3);
+    font-weight: 600;
+}
+
+.occ-4 {
+    background-color: rgba(219, 109, 40, 0.2);
+    color: var(--occ-4);
+    font-weight: 600;
+}
+
+.occ-5 {
+    background-color: rgba(248, 81, 73, 0.2);
+    color: var(--occ-5);
+    font-weight: 600;
+}
+
+/* Legend */
+.legend {
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+.legend h3 {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+    color: var(--text-secondary);
+}
+
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+}
+
+.legend-color.occ-0 { background-color: var(--occ-0); }
+.legend-color.occ-1 { background-color: var(--occ-1); }
+.legend-color.occ-2 { background-color: var(--occ-2); }
+.legend-color.occ-3 { background-color: var(--occ-3); }
+.legend-color.occ-4 { background-color: var(--occ-4); }
+.legend-color.occ-5 { background-color: var(--occ-5); }
+
+/* Footer */
+footer {
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+}
+
+footer p {
+    margin-bottom: var(--spacing-xs);
+}
+
+footer a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-md);
+    }
+
+    header h1 {
+        font-size: var(--font-size-xl);
+    }
+
+    .controls {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .date-tabs {
+        justify-content: flex-start;
+    }
+
+    .prediction-table {
+        font-size: var(--font-size-sm);
+    }
+
+    .prediction-table th,
+    .prediction-table td {
+        padding: var(--spacing-sm);
+    }
+
+    .legend-items {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
