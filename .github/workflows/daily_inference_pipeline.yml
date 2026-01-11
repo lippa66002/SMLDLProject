@@ -29,6 +29,7 @@ jobs:
       - name: Run Inference Script
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORK_API_KEY }}
+          GTFS_REGIONAL_API_KEY: ${{ secrets.GTFS_REGIONAL_API_KEY }}
         run: python -m src.pipelines.batch_inference_pipeline
 
       - name: Commit and Push Dashboard Data
@@ -37,5 +38,5 @@ jobs:
           git config --global user.email "actions@github.com"
           git add docs/dashboard_data.json
           # Only commit if there are changes
-          git diff --staged --quiet || git commit -m "Update dashboard data [skip ci]"
+          git diff --staged --quiet || git commit -m "Update dashboard data"
           git push
