@@ -1,13 +1,25 @@
 """
-LightGBM Training Pipeline for Occupancy Prediction
+LightGBM Training Pipeline for Max Occupancy Classification
 
-Trains a LightGBM regression model to predict avg_occupancy (or max_occupancy)
-using v2 feature groups from Hopsworks.
+Trains a LightGBM classifier to predict max_occupancy as discrete classes (0-5).
+
+Design considerations:
+    - Ordinal-aware: Penalties scale with distance from true class
+    - Asymmetric: Higher penalty for underestimating crowded situations
+    - Minority-focused: Higher recall for crowded classes (2-5)
+
+Classes:
+    0 = EMPTY
+    1 = MANY_SEATS_AVAILABLE  
+    2 = FEW_SEATS_AVAILABLE
+    3 = STANDING_ROOM_ONLY
+    4 = CRUSHED_STANDING_ROOM_ONLY
+    5 = FULL
 
 Features used:
     - Traffic: hour, route_id, direction_id
     - Weather: temperature_2m, precipitation, windspeed_10m, cloudcover, prev_* columns
-    - Calendar: month, day, weekday, is_weekend, is_holiday_se, is_workday_se
+    - Calendar: month, weekday, is_weekend, is_holiday_se, is_workday_se
 """
 import os
 import warnings
@@ -21,7 +33,12 @@ import pandas as pd
 from dotenv import load_dotenv
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    recall_score,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 from tqdm import tqdm
@@ -32,7 +49,7 @@ load_dotenv()
 # CONFIGURATION - Change these to modify behavior
 # ============================================================================
 
-TARGET_COLUMN = "avg_occupancy"
+TARGET_COLUMN = "max_occupancy"
 
 # Hopsworks configuration
 HOPSWORKS_PROJECT = "occupancy"
@@ -41,17 +58,26 @@ FV_VERSION = 1
 TRAIN_TEST_SPLIT_VERSION = 1
 
 # Model configuration
-MODEL_NAME = f"occupancy_lgbm_clipped_{TARGET_COLUMN}"
-MODEL_DIR = Path(__file__).parent / "model_artifact"
-PREDICTION_MIN = 0.0  # Minimum allowed prediction value
-PREDICTION_MAX = 5.0  # Maximum allowed prediction value
+MODEL_NAME = f"occupancy_lgbm_classifier_{TARGET_COLUMN}"
+MODEL_DIR = Path(__file__).parent / "model_artifact_max"
+
+# Class labels (ordinal)
+CLASS_NAMES = [
+    "EMPTY",
+    "MANY_SEATS",
+    "FEW_SEATS", 
+    "STANDING",
+    "CRUSHED",
+    "FULL",
+]
+NUM_CLASSES = 6
 
 # Data split configuration
 TRAIN_START_DATE = "2022-10-01"
 TRAIN_END_DATE = "2025-11-30"
 TEST_START_DATE = "2025-12-01"
 TEST_END_DATE = "2026-01-08"
-CREATE_NEW_SPLIT = False  # Set to True to create a new train/test split, False to reuse existing
+CREATE_NEW_SPLIT = False  # Set to False to use existing split
 
 # Hyperparameter tuning configuration
 TUNE_SAMPLE_FRACTION = 0.50  # Use 50% of data for tuning
@@ -63,8 +89,6 @@ RANDOM_STATE = 42
 # FEATURE DEFINITIONS
 # ============================================================================
 
-# Features to select from each feature group
-# Note: event_time is included in the query for temporal splits but dropped before training
 TRAFFIC_FEATURES = ["hour", "route_id", "direction_id"]
 WEATHER_FEATURES = [
     "temperature_2m",
@@ -84,7 +108,6 @@ CALENDAR_FEATURES = [
     "is_workday_se",
 ]
 
-# Feature types for preprocessing
 CATEGORICAL_FEATURES = ["route_id", "direction_id", "weekday"]
 NUMERIC_FEATURES = [
     "hour",
@@ -117,14 +140,11 @@ def login():
 def create_feature_view(fs):
     """
     Create or get the feature view joining traffic, weather, and calendar data.
-
-    Returns the feature view for training.
     """
     fg_traffic = fs.get_feature_group("skane_traffic", version=FG_VERSION)
     fg_weather = fs.get_feature_group("skane_weather", version=FG_VERSION)
     fg_calendar = fs.get_feature_group("sweden_calendar", version=FG_VERSION)
 
-    # Build the query with joins
     query = (
         fg_traffic.select(TRAFFIC_FEATURES + [TARGET_COLUMN, "event_time"])
         .join(
@@ -141,7 +161,7 @@ def create_feature_view(fs):
         name=f"occupancy_fv_{TARGET_COLUMN}",
         query=query,
         labels=[TARGET_COLUMN],
-        description=f"Occupancy FV: traffic + calendar + weather for {TARGET_COLUMN} prediction",
+        description=f"Occupancy FV for {TARGET_COLUMN} classification",
         version=FV_VERSION,
     )
 
@@ -154,16 +174,9 @@ def _bool_to_int(x):
 
 
 def build_preprocessor() -> ColumnTransformer:
-    """
-    Build the preprocessing pipeline for features.
-
-    LightGBM handles categoricals natively, but we encode them
-    for consistency in the sklearn pipeline.
-    """
-    # Numeric preprocessing: impute missing with median
+    """Build the preprocessing pipeline for features."""
     numeric_transformer = SimpleImputer(strategy="median")
 
-    # Categorical preprocessing: impute + ordinal encode
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -174,8 +187,6 @@ def build_preprocessor() -> ColumnTransformer:
         ]
     )
 
-    # Boolean: convert to int first, then impute
-    # SimpleImputer doesn't support bool dtype, so we convert to int
     boolean_transformer = Pipeline(
         steps=[
             ("to_int", FunctionTransformer(_bool_to_int, validate=False)),
@@ -189,65 +200,118 @@ def build_preprocessor() -> ColumnTransformer:
             ("cat", categorical_transformer, CATEGORICAL_FEATURES),
             ("bool", boolean_transformer, BOOLEAN_FEATURES),
         ],
-        remainder="drop",  # Drop columns not specified
+        remainder="drop",
     )
 
     return preprocessor
 
 
-def get_hyperparameter_grid() -> dict:
+def compute_sample_weights(y: np.ndarray) -> np.ndarray:
     """
-    Define the hyperparameter search space for LightGBM.
+    Compute asymmetric sample weights for ordinal classification.
+    
+    Weight strategy:
+    - Base weight increases with class (crowded classes are more important)
+    - This encourages higher recall for minority crowded classes
+    - Underestimating crowded situations is penalized more during training
+    
+    Weight formula: weight = 1 + class_value * 0.5
+    Class 0 -> 1.0, Class 5 -> 3.5
+    """
+    weights = 1.0 + y * 0.5
+    return weights
 
-    Expanded grid for more thorough search.
+
+def get_class_weights() -> dict:
+    """
+    Compute class weights to boost minority classes.
+    
+    Classes 2-5 are minority and safety-critical, so they get higher weight.
     """
     return {
+        0: 1.0,   # EMPTY - majority class
+        1: 1.5,   # MANY_SEATS - common
+        2: 3.0,   # FEW_SEATS - minority
+        3: 5.0,   # STANDING - rare
+        4: 8.0,   # CRUSHED - very rare
+        5: 10.0,  # FULL - extremely rare, safety-critical
+    }
+
+
+def get_hyperparameter_grid() -> dict:
+    """Define the hyperparameter search space for LightGBM classifier."""
+    return {
         "model__n_estimators": [300, 500, 1000],
-        "model__learning_rate": [0.01, 0.05, 0.1, 0.2],
-        "model__max_depth": [5, 10, 20, -1],
-        "model__num_leaves": [31, 63, 127, 255],
-        "model__min_child_samples": [10, 20, 50, 100],
-        "model__subsample": [0.7, 0.8, 0.9, 1.0],
-        "model__colsample_bytree": [0.7, 0.8, 0.9, 1.0],
+        "model__learning_rate": [0.01, 0.05, 0.1],
+        "model__max_depth": [5, 10, 15, -1],
+        "model__num_leaves": [31, 63, 127],
+        "model__min_child_samples": [20, 50, 100],
+        "model__subsample": [0.7, 0.8, 0.9],
+        "model__colsample_bytree": [0.7, 0.8, 0.9],
         "model__reg_alpha": [0, 0.01, 0.1],
         "model__reg_lambda": [0, 0.01, 0.1],
     }
 
 
-class ClippedLGBMRegressor(lgb.LGBMRegressor):
+def ordinal_weighted_recall(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
-    LGBMRegressor wrapper that clips predictions to a valid range.
+    Compute weighted recall with emphasis on crowded classes.
     
-    Ensures all predictions fall within [PREDICTION_MIN, PREDICTION_MAX].
+    Higher recall for classes 2-5 is more important than classes 0-1.
     """
+    class_weights = get_class_weights()
+    weights = np.array([class_weights[i] for i in range(NUM_CLASSES)])
     
-    def predict(self, X, **kwargs):
-        """Predict with clipping to valid range."""
-        raw_predictions = super().predict(X, **kwargs)
-        return np.clip(raw_predictions, PREDICTION_MIN, PREDICTION_MAX)
+    recall_per_class = recall_score(y_true, y_pred, average=None, labels=range(NUM_CLASSES), zero_division=0)
+    
+    # Pad if some classes are missing
+    if len(recall_per_class) < NUM_CLASSES:
+        padded = np.zeros(NUM_CLASSES)
+        padded[:len(recall_per_class)] = recall_per_class
+        recall_per_class = padded
+    
+    weighted_recall = np.sum(recall_per_class * weights) / np.sum(weights)
+    return weighted_recall
+
+
+def ordinal_cost(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """
+    Compute asymmetric ordinal cost.
+    
+    Underestimation (predicting lower than actual) is penalized more heavily,
+    especially for crowded classes.
+    
+    Cost = sum of |y_true - y_pred| * asymmetric_factor
+    Where asymmetric_factor = 2.0 if underestimating, 1.0 if overestimating
+    """
+    diff = y_true - y_pred
+    
+    # Underestimation penalty: 2x for underestimating crowded situations
+    underestimate_mask = diff > 0  # true > pred means underestimation
+    
+    cost = np.abs(diff).astype(float)
+    cost[underestimate_mask] *= 2.0  # Double penalty for underestimation
+    
+    # Additional penalty based on actual crowdedness
+    cost *= (1 + y_true * 0.2)  # More penalty when actual is crowded
+    
+    return np.mean(cost)
 
 
 def tune_hyperparameters(
     X_train: pd.DataFrame, y_train: pd.Series
 ) -> dict:
     """
-    Perform hyperparameter tuning using a temporal split on a sample of the data.
-
-    Uses a temporal train/validation split instead of random sampling to better
-    reflect real-world prediction scenarios.
-
-    Returns the best parameters found.
+    Perform hyperparameter tuning using ordinal-aware metrics.
     """
     print(f"\n{'='*60}")
     print(f"HYPERPARAMETER TUNING (using {TUNE_SAMPLE_FRACTION*100:.0f}% of data)")
     print(f"{'='*60}")
 
-    # Take the first TUNE_SAMPLE_FRACTION of data (temporal split)
     sample_size = int(len(X_train) * TUNE_SAMPLE_FRACTION)
     X_sample = X_train.iloc[:sample_size]
-    y_sample = y_train.iloc[:sample_size]
+    y_sample = y_train.iloc[:sample_size].astype(int)
 
-    # Split sample temporally: 80% train, 20% validation
     tune_split_idx = int(len(X_sample) * 0.8)
     X_tune_train = X_sample.iloc[:tune_split_idx]
     y_tune_train = y_sample.iloc[:tune_split_idx]
@@ -256,28 +320,35 @@ def tune_hyperparameters(
 
     print(f"Tuning train size: {len(X_tune_train):,} rows")
     print(f"Tuning val size:   {len(X_tune_val):,} rows")
+    
+    # Show class distribution
+    print(f"\nClass distribution in tuning data:")
+    for i in range(NUM_CLASSES):
+        count = (y_tune_train == i).sum()
+        pct = count / len(y_tune_train) * 100
+        print(f"  {i} ({CLASS_NAMES[i]}): {count:,} ({pct:.1f}%)")
 
-    # Get parameter grid and generate random combinations
+    # Compute sample weights for training
+    sample_weights = compute_sample_weights(y_tune_train.values)
+
     param_grid = get_hyperparameter_grid()
     rng = np.random.RandomState(RANDOM_STATE)
 
-    # Generate random parameter combinations
     param_combinations = []
     for _ in range(TUNE_N_ITER):
         params = {name: rng.choice(values) for name, values in param_grid.items()}
         param_combinations.append(params)
 
-    print(f"Testing {TUNE_N_ITER} parameter combinations...\n")
+    print(f"\nTesting {TUNE_N_ITER} parameter combinations...")
+    print("Optimizing for: weighted recall (crowded class focus)\n")
 
-    best_score = float("inf")
+    best_score = -float("inf")
     best_params = None
 
-    # Suppress the feature names warning during tuning
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*feature names.*")
 
-        for i, params in enumerate(tqdm(param_combinations, desc="Tuning progress", unit="config")):
-            # Extract model parameters (remove 'model__' prefix)
+        for params in tqdm(param_combinations, desc="Tuning progress", unit="config"):
             model_params = {k.replace("model__", ""): v for k, v in params.items()}
 
             pipeline = Pipeline(
@@ -285,7 +356,10 @@ def tune_hyperparameters(
                     ("preprocessor", build_preprocessor()),
                     (
                         "model",
-                        ClippedLGBMRegressor(
+                        lgb.LGBMClassifier(
+                            objective="multiclass",
+                            num_class=NUM_CLASSES,
+                            class_weight=get_class_weights(),
                             random_state=RANDOM_STATE,
                             n_jobs=-1,
                             verbose=-1,
@@ -295,20 +369,22 @@ def tune_hyperparameters(
                 ]
             )
 
-            # Fit and evaluate
-            pipeline.fit(X_tune_train, y_tune_train)
+            # Fit with sample weights
+            pipeline.fit(X_tune_train, y_tune_train, model__sample_weight=sample_weights)
             predictions = pipeline.predict(X_tune_val)
-            rmse = np.sqrt(mean_squared_error(y_tune_val, predictions))
+            
+            # Use weighted recall as the optimization target
+            score = ordinal_weighted_recall(y_tune_val.values, predictions)
 
-            if rmse < best_score:
-                best_score = rmse
+            if score > best_score:
+                best_score = score
                 best_params = params
 
     print(f"\n{'='*60}")
-    print(f"TUNING COMPLETE")
+    print("TUNING COMPLETE")
     print(f"{'='*60}")
-    print(f"Best RMSE: {best_score:.4f}")
-    print(f"Best parameters:")
+    print(f"Best Weighted Recall: {best_score:.4f}")
+    print("Best parameters:")
     for k, v in best_params.items():
         print(f"  {k}: {v}")
 
@@ -318,16 +394,15 @@ def tune_hyperparameters(
 def train_final_model(
     X_train: pd.DataFrame, y_train: pd.Series, best_params: dict
 ) -> Pipeline:
-    """
-    Train the final model on full training data with best parameters.
-    """
+    """Train the final model on full training data with best parameters."""
     print(f"\n{'='*60}")
     print("TRAINING FINAL MODEL")
     print(f"{'='*60}")
     print(f"Training on {len(X_train):,} rows")
 
-    # Extract model parameters (remove 'model__' prefix)
     model_params = {k.replace("model__", ""): v for k, v in best_params.items()}
+    y_train_int = y_train.astype(int)
+    sample_weights = compute_sample_weights(y_train_int.values)
 
     n_estimators = model_params.get("n_estimators", 100)
     print(f"Training {n_estimators} boosting rounds...")
@@ -337,7 +412,10 @@ def train_final_model(
             ("preprocessor", build_preprocessor()),
             (
                 "model",
-                ClippedLGBMRegressor(
+                lgb.LGBMClassifier(
+                    objective="multiclass",
+                    num_class=NUM_CLASSES,
+                    class_weight=get_class_weights(),
                     random_state=RANDOM_STATE,
                     n_jobs=-1,
                     verbose=-1,
@@ -347,10 +425,9 @@ def train_final_model(
         ]
     )
 
-    # Suppress the feature names warning
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*feature names.*")
-        pipeline.fit(X_train, y_train)
+        pipeline.fit(X_train, y_train_int, model__sample_weight=sample_weights)
 
     print("Training complete!")
 
@@ -361,38 +438,58 @@ def evaluate_model(
     model: Pipeline, X_test: pd.DataFrame, y_test: pd.Series
 ) -> dict:
     """
-    Evaluate the trained model on test data.
-
-    Returns dictionary of metrics.
+    Evaluate the trained classifier with ordinal-aware metrics.
     """
     print(f"\n{'='*60}")
     print("MODEL EVALUATION")
     print(f"{'='*60}")
     print(f"Evaluating on {len(X_test):,} test rows")
 
-    # Suppress the feature names warning during prediction
+    y_test_int = y_test.astype(int)
+
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*feature names.*")
         predictions = model.predict(X_test)
 
-    # Calculate metrics
-    rmse = np.sqrt(mean_squared_error(y_test, predictions))
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
+    # Basic metrics
+    accuracy = accuracy_score(y_test_int, predictions)
+    weighted_recall = ordinal_weighted_recall(y_test_int.values, predictions)
+    ordinal_cost_val = ordinal_cost(y_test_int.values, predictions)
 
     print(f"\nResults:")
-    print(f"  RMSE: {rmse:.4f}")
-    print(f"  MAE:  {mae:.4f}")
-    print(f"  R²:   {r2:.4f}")
+    print(f"  Accuracy:        {accuracy:.4f}")
+    print(f"  Weighted Recall: {weighted_recall:.4f}")
+    print(f"  Ordinal Cost:    {ordinal_cost_val:.4f}")
 
-    # Show prediction distribution
-    print(f"\nPrediction statistics:")
-    print(f"  Actual range:    [{y_test.min():.2f}, {y_test.max():.2f}]")
-    print(f"  Predicted range: [{predictions.min():.2f}, {predictions.max():.2f}]")
-    print(f"  Actual mean:     {y_test.mean():.2f}")
-    print(f"  Predicted mean:  {predictions.mean():.2f}")
+    # Per-class recall (important for minority classes)
+    print(f"\nPer-class Recall:")
+    recall_per_class = recall_score(y_test_int, predictions, average=None, labels=range(NUM_CLASSES), zero_division=0)
+    for i, rec in enumerate(recall_per_class):
+        count = (y_test_int == i).sum()
+        print(f"  {i} ({CLASS_NAMES[i]:12}): {rec:.3f}  (n={count:,})")
 
-    return {"rmse": rmse, "mae": mae, "r2": r2}
+    # Confusion matrix
+    print(f"\nConfusion Matrix:")
+    cm = confusion_matrix(y_test_int, predictions, labels=range(NUM_CLASSES))
+    print("     Predicted ->")
+    print("     " + "".join(f"{i:6}" for i in range(NUM_CLASSES)))
+    for i, row in enumerate(cm):
+        print(f"  {i}: " + "".join(f"{v:6}" for v in row))
+
+    # Classification report
+    print(f"\nClassification Report:")
+    print(classification_report(
+        y_test_int, predictions, 
+        labels=range(NUM_CLASSES),
+        target_names=CLASS_NAMES,
+        zero_division=0
+    ))
+
+    return {
+        "accuracy": accuracy,
+        "weighted_recall": weighted_recall,
+        "ordinal_cost": ordinal_cost_val,
+    }
 
 
 def save_and_upload_model(
@@ -402,25 +499,21 @@ def save_and_upload_model(
     mr,
     X_train: pd.DataFrame,
 ) -> None:
-    """
-    Save model locally and upload to Hopsworks Model Registry.
-    """
+    """Save model locally and upload to Hopsworks Model Registry."""
     print("\n--- Saving Model ---")
 
-    # Save locally
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODEL_DIR / "model.pkl"
     joblib.dump(model, model_path)
     print(f"Saved model to: {model_path}")
 
-    # Upload to Hopsworks
     print("Uploading to Hopsworks Model Registry...")
     hs_model = mr.sklearn.create_model(
         name=MODEL_NAME,
         metrics=metrics,
         feature_view=fv,
         input_example=X_train.sample(1, random_state=RANDOM_STATE),
-        description=f"LightGBM model for {TARGET_COLUMN} prediction",
+        description=f"LightGBM classifier for {TARGET_COLUMN} prediction (ordinal, asymmetric)",
     )
     hs_model.save(str(MODEL_DIR))
     print(f"Model uploaded: {MODEL_NAME}")
@@ -429,20 +522,17 @@ def save_and_upload_model(
 def main():
     """Main training pipeline."""
     print("=" * 70)
-    print(f"TRAINING PIPELINE: Predicting {TARGET_COLUMN}")
+    print(f"TRAINING PIPELINE: Classifying {TARGET_COLUMN}")
     print("=" * 70)
 
-    # Connect to Hopsworks
     print("\nConnecting to Hopsworks...")
     project = login()
     fs = project.get_feature_store()
     mr = project.get_model_registry()
 
-    # Create/get feature view
     print("\nSetting up feature view...")
     fv = create_feature_view(fs)
 
-    # Materialize the split to disk/S3 (only if CREATE_NEW_SPLIT is True)
     if CREATE_NEW_SPLIT:
         print("\nCreating new train/test split...")
         fv.create_train_test_split(
@@ -450,19 +540,17 @@ def main():
             train_end=TRAIN_END_DATE,
             test_start=TEST_START_DATE,
             test_end=TEST_END_DATE,
-            description=f"Temporal split: {TRAIN_START_DATE} - {TRAIN_END_DATE} train, {TEST_START_DATE} - {TEST_END_DATE} test",
+            description=f"Temporal split for {TARGET_COLUMN}",
             data_format="parquet",
             write_options={"wait_for_job": True},
         )
     else:
         print("\nUsing existing train/test split...")
 
-    # Read the materialized files
     X_train, X_test, y_train, y_test = fv.get_train_test_split(
         training_dataset_version=TRAIN_TEST_SPLIT_VERSION
     )
 
-    # Flatten labels if DataFrame
     if isinstance(y_train, pd.DataFrame):
         y_train = y_train.iloc[:, 0]
     if isinstance(y_test, pd.DataFrame):
@@ -470,18 +558,18 @@ def main():
 
     print(f"Train size: {len(X_train):,}")
     print(f"Test size:  {len(X_test):,}")
-    print(f"Train columns: {list(X_train.columns)}")
+    
+    # Show overall class distribution
+    print(f"\nClass distribution in training data:")
+    y_train_int = y_train.astype(int)
+    for i in range(NUM_CLASSES):
+        count = (y_train_int == i).sum()
+        pct = count / len(y_train_int) * 100
+        print(f"  {i} ({CLASS_NAMES[i]}): {count:,} ({pct:.1f}%)")
 
-    # Hyperparameter tuning
     best_params = tune_hyperparameters(X_train, y_train)
-
-    # Train final model
     model = train_final_model(X_train, y_train, best_params)
-
-    # Evaluate
     metrics = evaluate_model(model, X_test, y_test)
-
-    # Save and upload
     save_and_upload_model(model, metrics, fv, mr, X_train)
 
     print("\n" + "=" * 70)
