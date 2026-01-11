@@ -62,7 +62,7 @@ FG_VERSION = 2
 # Model configurations
 MODEL_AVG_NAME = "occupancy_lgbm_clipped_avg_occupancy"
 MODEL_MAX_NAME = "occupancy_lgbm_classifier_max_occupancy"  # Note: classifier, not clipped
-MODEL_VERSION = 1
+MODEL_VERSION = 2
 
 # Date range configuration: 7 days total (3 past + today + 3 future)
 PAST_DAYS = 3
