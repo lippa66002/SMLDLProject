@@ -1,5 +1,10 @@
-.env
+﻿.env
 */__pycache__/
 koda_cache/
 out/
 data/
+cache/
+model_artifact/
+route_selection_out/
+skane_VehiclePositions_*.csv
+.idea/
